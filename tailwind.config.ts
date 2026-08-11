@@ -11,6 +11,13 @@ const config: Config = {
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
+        teal: "#0A4747",
+        gold: "#C9A86A",
+        cream: "#FAF7F2",
+        ink: "#1A1A1A",
+      },
+      fontFamily: {
+        sans: ["var(--font-poppins)", "sans-serif"],
       },
     },
   },
