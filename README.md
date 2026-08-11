@@ -1,36 +1,74 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Copay-Assistance Leakage Modeler
 
-## Getting Started
+An illustrative model of how manufacturer copay-assistance dollars leak across a commercially-insured patient's fill sequence over a plan year, and how much of that leakage stays recoverable depending on when the manufacturer intervenes.
 
-First, run the development server:
+The central idea the tool demonstrates in numbers: timing is the leak. Catching diversion early preserves manufacturer dollars; catching it late recovers almost nothing.
+
+**This is a demonstration piece using hypothetical assumptions. It does not use real client data and is not a product.**
+
+## What it models
+
+The tool covers one patient, one specialty drug, and twelve monthly fills under two payer/PBM diversion tactics.
+
+**Copay accumulator.** The manufacturer's assistance does not count toward the patient's deductible or out-of-pocket maximum. The card pays down the patient's cost-share each fill and drains at its normal pace, but because those dollars never advance the deductible, the patient hits a cost cliff when the card empties mid-year. Manufacturer dollars are consumed without moving the patient through the deductible, which is the outcome the assistance was meant to buy.
+
+**Copay maximizer.** The drug is reclassified as a non-essential health benefit and the cost-share is engineered to extract the full annual card value evenly across the year. The patient usually faces no cliff, but the manufacturer loses the maximum possible amount.
+
+## The core insight
+
+The tool models an intervention-timing lever: enrollment, after fill 1, after fill 2, after fill 3, and retrospective (year-end). For each catch-point it computes the dollars already leaked (unrecoverable) and the dollars still recoverable if intervention happens at that point.
+
+Under the default parameters, the two tactics diverge sharply. At a real quarter-end (around fill 3) the accumulator is already fully unrecoverable while the maximizer still has about 75% of the card on the table. That divergence, front-loaded loss versus a slower even bleed, is the point of the delayed-leakage curve.
+
+Recoverable dollars are modeled as an idealized upper bound: 100% of the card balance not yet paid out at the catch-point. Real-world recovery is imperfect. The modeled quantity is labeled precisely as "card dollars captured by the tactic," not "waste."
+
+## Default parameters
+
+| Parameter | Default |
+| --- | --- |
+| Drug cost per fill | $5,000 |
+| Copay-card annual max | $15,000 |
+| Patient deductible | $5,000 |
+| Coinsurance after deductible | 20% |
+| Fills per year | 12 |
+
+All parameters are adjustable in the interface. The calculation engine handles the general case, including deductible-straddle fills and mid-fill card exhaustion, so the numbers stay consistent across the full parameter range rather than only at the defaults.
+
+## Scope
+
+Deliberately narrow: one patient, two tactics, twelve monthly fills. No hybrid maximizer, no patient cohorts, no multiple drugs, no out-of-pocket-maximum modeling.
+
+Planned extensions, not implemented here: leakage measured as excess over a clean-adjudication counterfactual, a hybrid maximizer model, and out-of-pocket-maximum modeling.
+
+## Architecture
+
+The calculation logic lives in `lib/leakage.ts` as pure functions, fully decoupled from the interface. Every mechanic is unit-tested, and a worked-example script prints the full fill-by-fill tables to the console for hand-verification.
+
+- `lib/leakage.ts` — pure calculation engine (both tactics, intervention-timing logic)
+- `lib/leakage.test.ts` — unit tests covering the worked example and edge cases
+- `scripts/worked-example.ts` — prints the worked-example tables to the console
+
+## Tech stack
+
+- Next.js 14 (App Router)
+- TypeScript
+- Tailwind CSS
+- Recharts
+
+State is held in React with no database, no persistence, and no backend.
+
+## Running it locally
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+To run the tests and print the worked example:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm test
+npm run worked-example
+```
