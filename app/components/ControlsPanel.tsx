@@ -20,6 +20,7 @@ function SliderRow({
   max,
   step,
   disabled,
+  hint,
   onChange,
 }: {
   label: string;
@@ -29,6 +30,7 @@ function SliderRow({
   max: number;
   step: number;
   disabled?: boolean;
+  hint?: string;
   onChange: (value: number) => void;
 }) {
   return (
@@ -47,6 +49,7 @@ function SliderRow({
         onChange={(e) => onChange(Number(e.target.value))}
         className="w-full disabled:cursor-not-allowed"
       />
+      {hint && <p className="mt-1 text-xs text-ink/50">{hint}</p>}
     </div>
   );
 }
@@ -123,6 +126,17 @@ export function ControlsPanel({
           onChange={(v) => updateParam('coinsuranceRate', v)}
         />
         <SliderRow
+          label="Plan out-of-pocket max"
+          value={params.oopMax}
+          displayValue={formatMoney(params.oopMax)}
+          min={1000}
+          max={20000}
+          step={100}
+          disabled={isMaximizer}
+          hint="2026 ACA ceiling for self-only coverage is $10,600. Plans can set it lower."
+          onChange={(v) => updateParam('oopMax', v)}
+        />
+        <SliderRow
           label="Fills per year"
           value={params.fillsPerYear}
           displayValue={String(params.fillsPerYear)}
@@ -135,9 +149,10 @@ export function ControlsPanel({
 
       {isMaximizer && (
         <p className="mt-3 text-xs text-ink/50">
-          Deductible and coinsurance are inert under the maximizer tactic — cost-share
-          is engineered to extract the card evenly across fills, independent of plan
-          design.
+          Deductible, coinsurance, and the out-of-pocket max are inert under the
+          maximizer tactic. The drug is designated a non-essential health benefit, which
+          takes it outside the out-of-pocket cap, and cost-share is engineered to extract
+          the card evenly across fills.
         </p>
       )}
 

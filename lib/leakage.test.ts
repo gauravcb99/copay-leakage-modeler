@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ACA_OOP_MAX_2026_SELF_ONLY,
   DEFAULT_PARAMS,
   computeRecoverableCurve,
   simulateAccumulator,
@@ -66,8 +67,8 @@ describe('simulateAccumulator — abandonment ON (default)', () => {
 describe('simulateAccumulator — abandonment OFF', () => {
   const rows = simulateAccumulator(DEFAULT_PARAMS, { abandonAtCliff: false });
 
-  it('keeps filling post-deductible at coinsurance rate (1000/fill)', () => {
-    const expectedCumulativeOOP = [0, 0, 0, 5000, 6000, 7000, 8000, 9000, 10000, 11000, 12000, 13000];
+  it('keeps filling post-deductible at coinsurance rate (1000/fill) until the OOP max', () => {
+    const expectedCumulativeOOP = [0, 0, 0, 5000, 6000, 7000, 8000, 9000, 10000, 10600, 10600, 10600];
     rows.forEach((row, i) => {
       expect(row.cumulativePatientOOP).toBe(expectedCumulativeOOP[i]);
     });
@@ -79,12 +80,14 @@ describe('simulateAccumulator — abandonment OFF', () => {
     }
   });
 
-  it('fill 4 is the deductible cliff (5000), then fill 5 onward costs coinsuranceRate * drugCostPerFill', () => {
+  it('fill 4 is the deductible cliff (5000), fills 5-9 cost 1000, fill 10 hits the OOP max at 600, fills 11-12 cost 0', () => {
     expect(rows[3]).toMatchObject({ costShare: 5000, cardPays: 0, patientOOP: 5000 });
-    for (let i = 4; i < 12; i++) {
-      expect(rows[i].costShare).toBe(1000);
-      expect(rows[i].cardPays).toBe(0);
-      expect(rows[i].patientOOP).toBe(1000);
+    for (let i = 4; i < 9; i++) {
+      expect(rows[i]).toMatchObject({ costShare: 1000, cardPays: 0, patientOOP: 1000 });
+    }
+    expect(rows[9]).toMatchObject({ costShare: 600, cardPays: 0, patientOOP: 600 });
+    for (let i = 10; i < 12; i++) {
+      expect(rows[i]).toMatchObject({ costShare: 0, cardPays: 0, patientOOP: 0 });
     }
   });
 });
@@ -194,5 +197,54 @@ describe('edge case — card smaller than a single fill cost-share', () => {
     const rows = simulateAccumulator(params);
     expect(rows[0]).toMatchObject({ costShare: 5000, cardPays: 2000, patientOOP: 3000, isCliff: true });
     expect(rows[0].deductibleRemainingAfter).toBe(2000); // 5000 - 3000 patient OOP
+  });
+});
+
+describe('out-of-pocket max', () => {
+  it('defaults to the 2026 ACA self-only ceiling', () => {
+    expect(ACA_OOP_MAX_2026_SELF_ONLY).toBe(10600);
+    expect(DEFAULT_PARAMS.oopMax).toBe(10600);
+  });
+
+  it('cumulative patient OOP never exceeds oopMax across a parameter sweep', () => {
+    for (const oopMax of [1000, 3000, 6000, 10600, 20000]) {
+      for (const patientDeductible of [0, 2000, 5000, 9000]) {
+        for (const cardAnnualMax of [0, 2000, 15000, 40000]) {
+          const params = { ...DEFAULT_PARAMS, oopMax, patientDeductible, cardAnnualMax };
+          for (const abandonAtCliff of [true, false]) {
+            const rows = simulateAccumulator(params, { abandonAtCliff });
+            rows.forEach((row) => {
+              expect(row.cumulativePatientOOP).toBeLessThanOrEqual(oopMax);
+            });
+          }
+        }
+      }
+    }
+  });
+
+  it('a plan OOP max of 6000 stops patient payments at 6000 (abandonment OFF)', () => {
+    const rows = simulateAccumulator({ ...DEFAULT_PARAMS, oopMax: 6000 }, { abandonAtCliff: false });
+    expect(rows[3].patientOOP).toBe(5000);
+    expect(rows[4].patientOOP).toBe(1000);
+    for (let i = 5; i < 12; i++) {
+      expect(rows[i].patientOOP).toBe(0);
+    }
+    expect(rows[11].cumulativePatientOOP).toBe(6000);
+  });
+
+  it('card dollars do not count toward OOP: fills 1-3 charge 15000 of cost-share, yet patient OOP is 0', () => {
+    const rows = simulateAccumulator(DEFAULT_PARAMS, { abandonAtCliff: false });
+    const firstThree = rows.slice(0, 3);
+    const costShareCharged = firstThree.reduce((sum, r) => sum + r.costShare, 0);
+    expect(costShareCharged).toBe(15000);
+    expect(costShareCharged).toBeGreaterThan(DEFAULT_PARAMS.oopMax);
+    expect(firstThree.reduce((sum, r) => sum + r.patientOOP, 0)).toBe(0);
+    expect(rows[2].cumulativePatientOOP).toBe(0);
+  });
+
+  it('maximizer ignores oopMax (non-EHB designation takes the drug outside the cap)', () => {
+    expect(simulateMaximizer({ ...DEFAULT_PARAMS, oopMax: 1000 })).toEqual(
+      simulateMaximizer(DEFAULT_PARAMS)
+    );
   });
 });
