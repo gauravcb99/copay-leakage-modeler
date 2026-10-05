@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   ACA_OOP_MAX_2026_SELF_ONLY,
   DEFAULT_PARAMS,
+  computeDetection,
+  computeDetectionTable,
   computeRecoverableCurve,
   simulateAccumulator,
   simulateMaximizer,
 } from './leakage';
 
-describe('simulateAccumulator — abandonment ON (default)', () => {
+describe('simulateAccumulator: abandonment ON (default)', () => {
   const rows = simulateAccumulator(DEFAULT_PARAMS);
 
   it('drains the card evenly across fills 1-3, then hits a cliff at fill 4', () => {
@@ -64,7 +66,7 @@ describe('simulateAccumulator — abandonment ON (default)', () => {
   });
 });
 
-describe('simulateAccumulator — abandonment OFF', () => {
+describe('simulateAccumulator: abandonment OFF', () => {
   const rows = simulateAccumulator(DEFAULT_PARAMS, { abandonAtCliff: false });
 
   it('keeps filling post-deductible at coinsurance rate (1000/fill) until the OOP max', () => {
@@ -157,7 +159,7 @@ describe('computeRecoverableCurve', () => {
   });
 });
 
-describe('general cost-share rule — deductible straddle (off-defaults)', () => {
+describe('general cost-share rule: deductible straddle (off-defaults)', () => {
   it('blends deductible and coinsurance dollars within a single fill when deductible < drugCostPerFill', () => {
     const params = { ...DEFAULT_PARAMS, patientDeductible: 2000, cardAnnualMax: 100000 };
     const rows = simulateAccumulator(params);
@@ -169,7 +171,7 @@ describe('general cost-share rule — deductible straddle (off-defaults)', () =>
     const params = { ...DEFAULT_PARAMS, patientDeductible: 2000, cardAnnualMax: 100000 };
     const rows = simulateAccumulator(params);
     // Card has ample balance and pays the full 2600 cost-share every fill, so the
-    // patient never pays out of pocket and the deductible never moves — cost-share
+    // patient never pays out of pocket and the deductible never moves: cost-share
     // therefore stays flat at 2600 all year instead of stepping up after 2000 "clears".
     expect(rows[0].patientOOP).toBe(0);
     expect(rows[0].deductibleRemainingAfter).toBe(2000);
@@ -182,7 +184,7 @@ describe('general cost-share rule — deductible straddle (off-defaults)', () =>
     const params = { ...DEFAULT_PARAMS, patientDeductible: 2000, cardAnnualMax: 2600 };
     const rows = simulateAccumulator(params, { abandonAtCliff: false });
     expect(rows[0]).toMatchObject({ costShare: 2600, cardPays: 2600, patientOOP: 0 });
-    expect(rows[0].deductibleRemainingAfter).toBe(2000); // untouched — card paid it all
+    expect(rows[0].deductibleRemainingAfter).toBe(2000); // untouched: card paid it all
     // Fill 2: card is empty, patient pays the full 2600 OOP themselves.
     expect(rows[1]).toMatchObject({ costShare: 2600, cardPays: 0, patientOOP: 2600, isCliff: true });
     expect(rows[1].deductibleRemainingAfter).toBe(0); // 2000 deductible-eligible portion consumed
@@ -191,7 +193,7 @@ describe('general cost-share rule — deductible straddle (off-defaults)', () =>
   });
 });
 
-describe('edge case — card smaller than a single fill cost-share', () => {
+describe('edge case: card smaller than a single fill cost-share', () => {
   it('hits the cliff on fill 1 when cardAnnualMax < first cost-share', () => {
     const params = { ...DEFAULT_PARAMS, cardAnnualMax: 2000 };
     const rows = simulateAccumulator(params);
@@ -272,5 +274,126 @@ describe('out-of-pocket max', () => {
     expect(simulateMaximizer({ ...DEFAULT_PARAMS, oopMax: 1000 })).toEqual(
       simulateMaximizer(DEFAULT_PARAMS)
     );
+  });
+});
+
+describe('detection layer', () => {
+  it('matches the 8 default detection values', () => {
+    const table = computeDetectionTable(DEFAULT_PARAMS);
+    const summary = table.map(({ method, accumulator, maximizer }) => ({
+      method,
+      acc: [accumulator.flagFill, accumulator.fillsPaidBeforeCatch, accumulator.recoverable],
+      max: [maximizer.flagFill, maximizer.fillsPaidBeforeCatch, maximizer.recoverable],
+    }));
+    expect(summary).toEqual([
+      { method: 'bvBeforeFirstFill', acc: [null, 0, 15000], max: [null, 0, 15000] },
+      { method: 'realtimeClaimsWithPlanDesign', acc: [2, 1, 10000], max: [2, 1, 13750] },
+      { method: 'realtimeClaimsOnly', acc: [3, 2, 5000], max: [2, 1, 13750] },
+      { method: 'quarterlyReview', acc: [null, 3, 0], max: [null, 3, 11250] },
+    ]);
+    const pcts = table.map(({ accumulator, maximizer }) => [
+      Math.round(accumulator.recoverablePct * 100),
+      Math.round(maximizer.recoverablePct * 100),
+    ]);
+    expect(pcts).toEqual([
+      [100, 100],
+      [67, 92],
+      [33, 92],
+      [0, 75],
+    ]);
+    table.forEach(({ accumulator, maximizer }) => {
+      expect(accumulator.caughtInYear).toBe(true);
+      expect(maximizer.caughtInYear).toBe(true);
+    });
+  });
+
+  it('agrees with the recoverable curve at matching catch-points (accumulator)', () => {
+    const curve = computeRecoverableCurve(DEFAULT_PARAMS, 'accumulator');
+    const at = (cp: string) => curve.find((p) => p.catchPoint === cp)!;
+    const detect = (m: Parameters<typeof computeDetection>[2]) =>
+      computeDetection(DEFAULT_PARAMS, 'accumulator', m);
+    const pairs = [
+      [detect('bvBeforeFirstFill'), at('enrollment')],
+      [detect('realtimeClaimsWithPlanDesign'), at('afterFill1')],
+      [detect('realtimeClaimsOnly'), at('afterFill2')],
+      [detect('quarterlyReview'), at('afterFill3')],
+    ] as const;
+    for (const [d, p] of pairs) {
+      expect(d.alreadyLeaked).toBe(p.alreadyLeaked);
+      expect(d.recoverable).toBe(p.recoverable);
+      expect(d.recoverablePct).toBe(p.recoverablePct);
+    }
+  });
+
+  it('plan design catches an accumulator that claims alone never can (drug 500, deductible 2000)', () => {
+    const params = { ...DEFAULT_PARAMS, drugCostPerFill: 500, patientDeductible: 2000 };
+    const rows = simulateAccumulator(params, { abandonAtCliff: false });
+    expect(rows.every((r) => r.costShare === 500)).toBe(true);
+    expect(rows[11].cumulativeManufacturerCaptured).toBe(6000);
+
+    const claimsOnly = computeDetection(params, 'accumulator', 'realtimeClaimsOnly');
+    expect(claimsOnly).toMatchObject({
+      flagFill: null,
+      caughtInYear: false,
+      fillsPaidBeforeCatch: 12,
+      recoverable: 0,
+    });
+
+    const planDesign = computeDetection(params, 'accumulator', 'realtimeClaimsWithPlanDesign');
+    expect(planDesign).toMatchObject({
+      flagFill: 5,
+      caughtInYear: true,
+      fillsPaidBeforeCatch: 4,
+      alreadyLeaked: 2000,
+      recoverable: 4000,
+    });
+  });
+
+  it('with plan oopMax at or below the ACA ceiling, plan design never pays more fills than claims alone', () => {
+    for (const oopMax of [3000, 6000, 10600]) {
+      for (const patientDeductible of [0, 1500, 5000]) {
+        for (const drugCostPerFill of [800, 3000, 5000, 12000]) {
+          const params = {
+            ...DEFAULT_PARAMS,
+            oopMax,
+            patientDeductible,
+            drugCostPerFill,
+            cardAnnualMax: 40000,
+          };
+          const planDesign = computeDetection(params, 'accumulator', 'realtimeClaimsWithPlanDesign');
+          const claimsOnly = computeDetection(params, 'accumulator', 'realtimeClaimsOnly');
+          expect(planDesign.fillsPaidBeforeCatch).toBeLessThanOrEqual(
+            claimsOnly.fillsPaidBeforeCatch
+          );
+        }
+      }
+    }
+  });
+
+  it('a single-fill maximizer cannot be confirmed by a repeat in-year', () => {
+    const params = { ...DEFAULT_PARAMS, fillsPerYear: 1 };
+    for (const method of ['realtimeClaimsWithPlanDesign', 'realtimeClaimsOnly'] as const) {
+      expect(computeDetection(params, 'maximizer', method)).toMatchObject({
+        flagFill: null,
+        caughtInYear: false,
+        recoverable: 0,
+      });
+    }
+  });
+
+  it('quarterly review at 6 fills catches after fill 2, leaving 10000 of the maximizer card', () => {
+    const result = computeDetection({ ...DEFAULT_PARAMS, fillsPerYear: 6 }, 'maximizer', 'quarterlyReview');
+    expect(result.fillsPaidBeforeCatch).toBe(2);
+    expect(result.recoverable).toBe(10000);
+  });
+
+  it('maximizer fingerprint tolerates uneven division (card 10000 over 12 fills)', () => {
+    const result = computeDetection(
+      { ...DEFAULT_PARAMS, cardAnnualMax: 10000 },
+      'maximizer',
+      'realtimeClaimsOnly'
+    );
+    expect(result.flagFill).toBe(2);
+    expect(result.recoverable).toBeCloseTo(10000 - 10000 / 12, 10);
   });
 });

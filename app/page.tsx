@@ -5,6 +5,7 @@ import type { LeakageParams, Tactic } from '@/lib/leakage';
 import { DEFAULT_PARAMS } from '@/lib/leakage';
 import { Disclaimer } from './components/Disclaimer';
 import { ControlsPanel } from './components/ControlsPanel';
+import { DetectionPanel } from './components/DetectionPanel';
 import { FillChart } from './components/FillChart';
 import { RecoverableChart } from './components/RecoverableChart';
 import { SoWhatPanel } from './components/SoWhatPanel';
@@ -22,7 +23,7 @@ export default function Home() {
         </h1>
         <p className="mt-1 text-sm text-ink/60">
           Modeling how much manufacturer copay-card money is captured by payer/PBM
-          diversion tactics — and how much is still recoverable, depending on when the
+          diversion tactics, and how much is still recoverable, depending on when the
           manufacturer catches it.
         </p>
       </header>
@@ -51,6 +52,10 @@ export default function Home() {
       </div>
 
       <div className="mb-6">
+        <DetectionPanel params={params} />
+      </div>
+
+      <div className="mb-6">
         <SoWhatPanel params={params} />
       </div>
 
@@ -59,13 +64,14 @@ export default function Home() {
           This model labels the modeled quantity precisely as{' '}
           <span className="italic">&ldquo;card dollars captured by the tactic,&rdquo;</span>{' '}
           not &ldquo;waste&rdquo; or &ldquo;pure leakage.&rdquo; Scope is deliberately
-          narrow: one patient, one drug, two tactics, twelve monthly fills — no
-          hybrid maximizer, no patient cohorts, no out-of-pocket maximum modeling.
+          narrow: one patient, one drug, two tactics, up to twelve monthly fills. The plan
+          out-of-pocket max is modeled for the accumulator (patient dollars only); there is
+          no hybrid maximizer and no patient cohorts.
         </p>
         <p className="mt-2">
           Planned v2 refinements (not implemented here): leakage measured as excess
           over a clean-adjudication counterfactual, a hybrid maximizer model, and
-          out-of-pocket-maximum modeling.
+          program-level roll-ups across patient cohorts.
         </p>
       </footer>
     </main>
