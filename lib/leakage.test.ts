@@ -9,7 +9,7 @@ import {
   simulateMaximizer,
 } from './leakage';
 
-describe('simulateAccumulator — abandonment ON (default)', () => {
+describe('simulateAccumulator: abandonment ON (default)', () => {
   const rows = simulateAccumulator(DEFAULT_PARAMS);
 
   it('drains the card evenly across fills 1-3, then hits a cliff at fill 4', () => {
@@ -66,7 +66,7 @@ describe('simulateAccumulator — abandonment ON (default)', () => {
   });
 });
 
-describe('simulateAccumulator — abandonment OFF', () => {
+describe('simulateAccumulator: abandonment OFF', () => {
   const rows = simulateAccumulator(DEFAULT_PARAMS, { abandonAtCliff: false });
 
   it('keeps filling post-deductible at coinsurance rate (1000/fill) until the OOP max', () => {
@@ -159,7 +159,7 @@ describe('computeRecoverableCurve', () => {
   });
 });
 
-describe('general cost-share rule — deductible straddle (off-defaults)', () => {
+describe('general cost-share rule: deductible straddle (off-defaults)', () => {
   it('blends deductible and coinsurance dollars within a single fill when deductible < drugCostPerFill', () => {
     const params = { ...DEFAULT_PARAMS, patientDeductible: 2000, cardAnnualMax: 100000 };
     const rows = simulateAccumulator(params);
@@ -171,7 +171,7 @@ describe('general cost-share rule — deductible straddle (off-defaults)', () =>
     const params = { ...DEFAULT_PARAMS, patientDeductible: 2000, cardAnnualMax: 100000 };
     const rows = simulateAccumulator(params);
     // Card has ample balance and pays the full 2600 cost-share every fill, so the
-    // patient never pays out of pocket and the deductible never moves — cost-share
+    // patient never pays out of pocket and the deductible never moves: cost-share
     // therefore stays flat at 2600 all year instead of stepping up after 2000 "clears".
     expect(rows[0].patientOOP).toBe(0);
     expect(rows[0].deductibleRemainingAfter).toBe(2000);
@@ -184,7 +184,7 @@ describe('general cost-share rule — deductible straddle (off-defaults)', () =>
     const params = { ...DEFAULT_PARAMS, patientDeductible: 2000, cardAnnualMax: 2600 };
     const rows = simulateAccumulator(params, { abandonAtCliff: false });
     expect(rows[0]).toMatchObject({ costShare: 2600, cardPays: 2600, patientOOP: 0 });
-    expect(rows[0].deductibleRemainingAfter).toBe(2000); // untouched — card paid it all
+    expect(rows[0].deductibleRemainingAfter).toBe(2000); // untouched: card paid it all
     // Fill 2: card is empty, patient pays the full 2600 OOP themselves.
     expect(rows[1]).toMatchObject({ costShare: 2600, cardPays: 0, patientOOP: 2600, isCliff: true });
     expect(rows[1].deductibleRemainingAfter).toBe(0); // 2000 deductible-eligible portion consumed
@@ -193,7 +193,7 @@ describe('general cost-share rule — deductible straddle (off-defaults)', () =>
   });
 });
 
-describe('edge case — card smaller than a single fill cost-share', () => {
+describe('edge case: card smaller than a single fill cost-share', () => {
   it('hits the cliff on fill 1 when cardAnnualMax < first cost-share', () => {
     const params = { ...DEFAULT_PARAMS, cardAnnualMax: 2000 };
     const rows = simulateAccumulator(params);

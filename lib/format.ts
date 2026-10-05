@@ -1,4 +1,4 @@
-// UI-side formatting helpers. No calculation logic lives here — see lib/leakage.ts.
+// UI-side formatting helpers. No calculation logic lives here: see lib/leakage.ts.
 import type { CatchPoint } from './leakage';
 
 export function formatMoney(n: number): string {

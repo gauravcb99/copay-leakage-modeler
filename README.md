@@ -66,8 +66,8 @@ Planned extensions, not implemented here: leakage measured as excess over a clea
 The calculation logic lives in `lib/leakage.ts` as pure functions, fully decoupled from the interface. Every mechanic is unit-tested, and a worked-example script prints the full fill-by-fill tables to the console for hand-verification.
 
 - `lib/leakage.ts`: pure calculation engine (both tactics, intervention-timing logic, detection layer)
-- `lib/leakage.test.ts` — unit tests covering the worked example and edge cases
-- `scripts/worked-example.ts` — prints the worked-example tables to the console
+- `lib/leakage.test.ts`: unit tests covering the worked example and edge cases
+- `scripts/worked-example.ts`: prints the worked-example tables to the console
 
 ## Tech stack
 

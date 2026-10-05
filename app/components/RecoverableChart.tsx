@@ -41,7 +41,7 @@ export function RecoverableChart({ params }: RecoverableChartProps) {
         <div>
           <h2 className="text-base font-semibold text-ink">Delayed-leakage curve</h2>
           <p className="text-sm text-ink/60">
-            Recoverable dollars by intervention catch-point — an{' '}
+            Recoverable dollars by intervention catch-point, an{' '}
             <span className="font-medium text-ink/80">idealized upper bound</span> (100%
             of the card balance not yet paid out). Real-world recovery is imperfect.
           </p>

@@ -23,7 +23,7 @@ console.log('='.repeat(100));
 console.log('DEFAULT_PARAMS:', DEFAULT_PARAMS);
 console.log('='.repeat(100));
 
-console.log('\n--- Accumulator — abandonment ON (default) ---\n');
+console.log('\n--- Accumulator: abandonment ON (default) ---\n');
 const accOn = simulateAccumulator(DEFAULT_PARAMS);
 console.table(
   accOn.map((r) => ({
@@ -39,7 +39,7 @@ console.table(
   }))
 );
 
-console.log('\n--- Accumulator — abandonment OFF (patient continues) ---\n');
+console.log('\n--- Accumulator: abandonment OFF (patient continues) ---\n');
 const accOff = simulateAccumulator(DEFAULT_PARAMS, { abandonAtCliff: false });
 console.log('Cumulative patient OOP by fill:', accOff.map((r) => r.cumulativePatientOOP).join(', '));
 console.log(

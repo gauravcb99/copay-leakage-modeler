@@ -1,5 +1,5 @@
 // Pure calculation engine for the copay-assistance leakage model.
-// No React, no UI, no side effects — every export here is a pure function.
+// No React, no UI, no side effects: every export here is a pure function.
 
 export type Tactic = 'accumulator' | 'maximizer';
 
@@ -74,7 +74,7 @@ function computeCostShare(
 
 /**
  * Copay Accumulator: the manufacturer card pays cost-share until it's
- * drained. Card dollars never advance the deductible — only patient
+ * drained. Card dollars never advance the deductible: only patient
  * out-of-pocket dollars do. This is the mechanical heart of the accumulator.
  *
  * Card-allocation convention for mid-fill exhaustion (only reachable off
@@ -227,7 +227,7 @@ const CATCH_POINT_FILL: Record<CatchPoint, number> = {
 /**
  * Recoverable-vs-already-leaked curve. Always run against the
  * no-intervention (abandonAtCliff: false) fill sequence, since the
- * catch-point framing asks "what if we intervened at fill N" — abandonment
+ * catch-point framing asks "what if we intervened at fill N": abandonment
  * is a downstream consequence of NOT intervening, not itself a catch-point.
  * `recoverable` is the idealized upper bound: 100% of card dollars not yet
  * paid out as of that catch-point. It is derived from totalCaptured (the
