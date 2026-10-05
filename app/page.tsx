@@ -23,7 +23,7 @@ export default function Home() {
         </h1>
         <p className="mt-1 text-sm text-ink/60">
           Modeling how much manufacturer copay-card money is captured by payer/PBM
-          diversion tactics — and how much is still recoverable, depending on when the
+          diversion tactics, and how much is still recoverable, depending on when the
           manufacturer catches it.
         </p>
       </header>
