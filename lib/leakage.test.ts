@@ -244,30 +244,59 @@ describe('out-of-pocket max', () => {
     expect(rows[2].cumulativePatientOOP).toBe(0);
   });
 
-  it('accumulator manufacturer capture is invariant to oopMax (card dollars never count toward the cap)', () => {
-    const capture = (rows: ReturnType<typeof simulateAccumulator>) =>
-      rows.map((r) => r.cumulativeManufacturerCaptured);
-    for (const abandonAtCliff of [true, false]) {
-      const baseline = simulateAccumulator(DEFAULT_PARAMS, { abandonAtCliff });
-      expect(baseline[11].cumulativeManufacturerCaptured).toBe(15000);
-      for (const oopMax of [500, 1000]) {
-        const rows = simulateAccumulator({ ...DEFAULT_PARAMS, oopMax }, { abandonAtCliff });
-        expect(rows[11].cumulativeManufacturerCaptured).toBe(15000);
-        expect(capture(rows)).toEqual(capture(baseline));
-        expect(rows.map((r) => r.cardPays)).toEqual(baseline.map((r) => r.cardPays));
-      }
-    }
-    // Off-defaults: capture still matches the default-oopMax run across the sweep grid.
-    for (const patientDeductible of [0, 2000, 5000, 9000]) {
-      for (const cardAnnualMax of [0, 2000, 15000, 40000]) {
-        const base = { ...DEFAULT_PARAMS, patientDeductible, cardAnnualMax };
-        const baseline = simulateAccumulator(base, { abandonAtCliff: false });
-        for (const oopMax of [500, 1000, 3000, 6000, 20000]) {
-          const rows = simulateAccumulator({ ...base, oopMax }, { abandonAtCliff: false });
-          expect(capture(rows)).toEqual(capture(baseline));
+  it('no claim charges more cost-share than the OOP room left before it, across a parameter sweep', () => {
+    for (const oopMax of [500, 1000, 3000, 6000, 10600, 20000]) {
+      for (const patientDeductible of [0, 2000, 5000, 9000]) {
+        for (const cardAnnualMax of [0, 2000, 15000, 40000]) {
+          for (const drugCostPerFill of [500, 5000, 20000]) {
+            for (const coinsuranceRate of [0.2, 0.5]) {
+              const params = {
+                ...DEFAULT_PARAMS,
+                oopMax,
+                patientDeductible,
+                cardAnnualMax,
+                drugCostPerFill,
+                coinsuranceRate,
+              };
+              for (const abandonAtCliff of [true, false]) {
+                let patientOOPBefore = 0;
+                simulateAccumulator(params, { abandonAtCliff }).forEach((row) => {
+                  expect(row.costShare).toBeLessThanOrEqual(oopMax - patientOOPBefore + 1e-9);
+                  patientOOPBefore = row.cumulativePatientOOP;
+                });
+              }
+            }
+          }
         }
       }
     }
+  });
+
+  it('caps each claim at the OOP room while the card pays, so the card drains across claims (drug 20000, coinsurance 0.5, card 40000)', () => {
+    const params = {
+      ...DEFAULT_PARAMS,
+      drugCostPerFill: 20000,
+      patientDeductible: 5000,
+      coinsuranceRate: 0.5,
+      cardAnnualMax: 40000,
+      oopMax: 10600,
+    };
+    const rows = simulateAccumulator(params, { abandonAtCliff: false });
+    for (let i = 0; i < 3; i++) {
+      expect(rows[i]).toMatchObject({ costShare: 10600, cardPays: 10600, patientOOP: 0 });
+    }
+    expect(rows[3]).toMatchObject({
+      costShare: 10600,
+      cardPays: 8200,
+      patientOOP: 2400,
+      cumulativePatientOOP: 2400,
+      isCliff: true,
+    });
+    expect(rows[4]).toMatchObject({ costShare: 8200, cardPays: 0, patientOOP: 8200, cumulativePatientOOP: 10600 });
+    for (let i = 5; i < 12; i++) {
+      expect(rows[i]).toMatchObject({ costShare: 0, cardPays: 0, patientOOP: 0, cumulativePatientOOP: 10600 });
+    }
+    expect(rows[11].cumulativeManufacturerCaptured).toBe(40000);
   });
 
   it('maximizer ignores oopMax (non-EHB designation takes the drug outside the cap)', () => {
