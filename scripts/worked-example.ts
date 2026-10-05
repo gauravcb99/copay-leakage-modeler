@@ -3,7 +3,9 @@
 // verification against the build spec before any UI is built.
 
 import {
+  type DetectionResult,
   DEFAULT_PARAMS,
+  computeDetectionTable,
   computeRecoverableCurve,
   simulateAccumulator,
   simulateMaximizer,
@@ -69,5 +71,23 @@ console.table(
     'Accum %': fmtPct(row.recoverablePct),
     'Maximizer Recoverable': fmtMoney(maxCurve[i].recoverable),
     'Maxim %': fmtPct(maxCurve[i].recoverablePct),
+  }))
+);
+
+console.log('\n--- Detection layer: when can you actually catch it? ---\n');
+function fmtCaught(d: DetectionResult): string {
+  if (d.method === 'bvBeforeFirstFill') return 'before fill 1';
+  if (d.method === 'quarterlyReview') return `after fill ${d.fillsPaidBeforeCatch}`;
+  return d.flagFill === null ? 'not caught' : `fill ${d.flagFill}`;
+}
+console.table(
+  computeDetectionTable(DEFAULT_PARAMS).map(({ method, accumulator, maximizer }) => ({
+    Method: method,
+    'Accum Flag': fmtCaught(accumulator),
+    'Accum Recoverable': fmtMoney(accumulator.recoverable),
+    'Accum %': fmtPct(accumulator.recoverablePct),
+    'Maxim Flag': fmtCaught(maximizer),
+    'Maxim Recoverable': fmtMoney(maximizer.recoverable),
+    'Maxim %': fmtPct(maximizer.recoverablePct),
   }))
 );
