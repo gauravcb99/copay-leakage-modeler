@@ -16,6 +16,7 @@ export interface LeakageParams {
   patientDeductible: number;
   coinsuranceRate: number; // e.g. 0.20
   fillsPerYear: number; // e.g. 12
+  oopMax: number; // plan out-of-pocket maximum, patient dollars only
 }
 
 export interface FillRow {
@@ -37,12 +38,18 @@ export interface RecoverablePoint {
   recoverablePct: number; // 0..1
 }
 
+// 2026 ACA maximum out-of-pocket limit for self-only coverage (HHS final
+// rule, June 25, 2025). Applies to in-network essential health benefits on
+// non-grandfathered plans. The family limit is $21,200.
+export const ACA_OOP_MAX_2026_SELF_ONLY = 10600;
+
 export const DEFAULT_PARAMS: LeakageParams = {
   drugCostPerFill: 5000,
   cardAnnualMax: 15000,
   patientDeductible: 5000,
   coinsuranceRate: 0.2,
   fillsPerYear: 12,
+  oopMax: ACA_OOP_MAX_2026_SELF_ONLY,
 };
 
 /**
@@ -75,14 +82,29 @@ function computeCostShare(
  * card pays what it has left (min(cardBalance, costShare)), the patient
  * covers the remainder out of pocket, and that patient remainder advances
  * the deductible up to the deductible-eligible portion of the fill.
+ *
+ * Out-of-pocket max: the cap applies to the patient's own dollars only,
+ * never to the card's. The card pays from the uncapped cost-share first, so
+ * oopMax can never reduce manufacturer capture. The patient's remaining
+ * portion is then capped at the OOP room left (oopMax minus cumulative
+ * patient OOP), so cumulative patient OOP stops at oopMax. The reported
+ * costShare is what was actually charged: card payment plus capped patient
+ * payment. The deductible advances only by the deductible-eligible part of
+ * what the patient actually paid.
  */
 export function simulateAccumulator(
   params: LeakageParams,
   opts?: { abandonAtCliff?: boolean }
 ): FillRow[] {
   const abandonAtCliff = opts?.abandonAtCliff ?? true;
-  const { drugCostPerFill, cardAnnualMax, patientDeductible, coinsuranceRate, fillsPerYear } =
-    params;
+  const {
+    drugCostPerFill,
+    cardAnnualMax,
+    patientDeductible,
+    coinsuranceRate,
+    fillsPerYear,
+    oopMax,
+  } = params;
 
   const rows: FillRow[] = [];
   let cardBalance = cardAnnualMax;
@@ -108,14 +130,16 @@ export function simulateAccumulator(
       continue;
     }
 
-    const { costShare, deductiblePortion } = computeCostShare(
+    const { costShare: uncappedCostShare, deductiblePortion } = computeCostShare(
       remainingDeductible,
       drugCostPerFill,
       coinsuranceRate
     );
 
-    const cardPays = Math.min(cardBalance, costShare);
-    const patientOOP = costShare - cardPays;
+    const cardPays = Math.min(cardBalance, uncappedCostShare);
+    const oopRoom = Math.max(0, oopMax - cumulativePatientOOP);
+    const patientOOP = Math.min(uncappedCostShare - cardPays, oopRoom);
+    const costShare = cardPays + patientOOP;
 
     const isCliff = !hasHitCliff && patientOOP > 0;
     if (isCliff) hasHitCliff = true;
@@ -144,7 +168,9 @@ export function simulateAccumulator(
 /**
  * Copay Maximizer: the drug is reclassified as a non-essential health
  * benefit and cost-share is engineered to extract the card evenly across
- * the year. Deductible and coinsurance are inert for this tactic.
+ * the year. Deductible, coinsurance, and oopMax are inert for this tactic:
+ * the non-EHB designation is exactly what takes the drug outside the
+ * out-of-pocket cap.
  *
  * Rounding convention: if cardAnnualMax doesn't divide evenly by
  * fillsPerYear, per-fill cost-share is computed precisely, and the final
