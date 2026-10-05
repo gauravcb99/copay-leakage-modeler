@@ -83,12 +83,14 @@ function computeCostShare(
  * covers the remainder out of pocket, and that patient remainder advances
  * the deductible up to the deductible-eligible portion of the fill.
  *
- * Out-of-pocket max: each fill's cost-share is capped at the OOP room left,
- * measured in patient dollars only. Card dollars never count toward the OOP
- * max, so the cap cannot bind while the card is paying. Once the patient
- * pays their own money, their cumulative OOP stops at oopMax. If the cap
- * binds within a fill, coinsurance is trimmed first, since deductible
- * dollars come first.
+ * Out-of-pocket max: the cap applies to the patient's own dollars only,
+ * never to the card's. The card pays from the uncapped cost-share first, so
+ * oopMax can never reduce manufacturer capture. The patient's remaining
+ * portion is then capped at the OOP room left (oopMax minus cumulative
+ * patient OOP), so cumulative patient OOP stops at oopMax. The reported
+ * costShare is what was actually charged: card payment plus capped patient
+ * payment. The deductible advances only by the deductible-eligible part of
+ * what the patient actually paid.
  */
 export function simulateAccumulator(
   params: LeakageParams,
@@ -128,13 +130,16 @@ export function simulateAccumulator(
       continue;
     }
 
-    const uncapped = computeCostShare(remainingDeductible, drugCostPerFill, coinsuranceRate);
-    const oopRoom = Math.max(0, oopMax - cumulativePatientOOP);
-    const costShare = Math.min(uncapped.costShare, oopRoom);
-    const deductiblePortion = Math.min(uncapped.deductiblePortion, costShare);
+    const { costShare: uncappedCostShare, deductiblePortion } = computeCostShare(
+      remainingDeductible,
+      drugCostPerFill,
+      coinsuranceRate
+    );
 
-    const cardPays = Math.min(cardBalance, costShare);
-    const patientOOP = costShare - cardPays;
+    const cardPays = Math.min(cardBalance, uncappedCostShare);
+    const oopRoom = Math.max(0, oopMax - cumulativePatientOOP);
+    const patientOOP = Math.min(uncappedCostShare - cardPays, oopRoom);
+    const costShare = cardPays + patientOOP;
 
     const isCliff = !hasHitCliff && patientOOP > 0;
     if (isCliff) hasHitCliff = true;

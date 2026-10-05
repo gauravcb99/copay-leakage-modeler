@@ -242,6 +242,32 @@ describe('out-of-pocket max', () => {
     expect(rows[2].cumulativePatientOOP).toBe(0);
   });
 
+  it('accumulator manufacturer capture is invariant to oopMax (card dollars never count toward the cap)', () => {
+    const capture = (rows: ReturnType<typeof simulateAccumulator>) =>
+      rows.map((r) => r.cumulativeManufacturerCaptured);
+    for (const abandonAtCliff of [true, false]) {
+      const baseline = simulateAccumulator(DEFAULT_PARAMS, { abandonAtCliff });
+      expect(baseline[11].cumulativeManufacturerCaptured).toBe(15000);
+      for (const oopMax of [500, 1000]) {
+        const rows = simulateAccumulator({ ...DEFAULT_PARAMS, oopMax }, { abandonAtCliff });
+        expect(rows[11].cumulativeManufacturerCaptured).toBe(15000);
+        expect(capture(rows)).toEqual(capture(baseline));
+        expect(rows.map((r) => r.cardPays)).toEqual(baseline.map((r) => r.cardPays));
+      }
+    }
+    // Off-defaults: capture still matches the default-oopMax run across the sweep grid.
+    for (const patientDeductible of [0, 2000, 5000, 9000]) {
+      for (const cardAnnualMax of [0, 2000, 15000, 40000]) {
+        const base = { ...DEFAULT_PARAMS, patientDeductible, cardAnnualMax };
+        const baseline = simulateAccumulator(base, { abandonAtCliff: false });
+        for (const oopMax of [500, 1000, 3000, 6000, 20000]) {
+          const rows = simulateAccumulator({ ...base, oopMax }, { abandonAtCliff: false });
+          expect(capture(rows)).toEqual(capture(baseline));
+        }
+      }
+    }
+  });
+
   it('maximizer ignores oopMax (non-EHB designation takes the drug outside the cap)', () => {
     expect(simulateMaximizer({ ...DEFAULT_PARAMS, oopMax: 1000 })).toEqual(
       simulateMaximizer(DEFAULT_PARAMS)
